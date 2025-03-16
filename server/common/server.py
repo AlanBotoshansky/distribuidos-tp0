@@ -1,5 +1,6 @@
 import socket
 import logging
+import signal
 
 
 class Server:
@@ -8,21 +9,57 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._shutdown_requested = False
+        
+        signal.signal(signal.SIGTERM, self.__handle_signal)
+        logging.info('action: setup_signal | result: success | signal: SIGTERM')
 
+    def __handle_signal(self, signalnum, frame):
+        """
+        Signal handler for graceful shutdown
+        """
+        if signalnum == signal.SIGTERM:
+            logging.info('action: signal_received | result: success | signal: SIGTERM')
+            self._shutdown_requested = True
+            
     def run(self):
         """
         Dummy Server loop
 
         Server that accept a new connections and establishes a
         communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
+        finishes, servers starts to accept new connections again.
+        The loop will continue until a SIGTERM signal is received.
         """
-
-        # TODO: Modify this program to handle signal to graceful shutdown
-        # the server
-        while True:
-            client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
+        try:
+            while not self._shutdown_requested:
+                self._server_socket.settimeout(1)
+                try:
+                    client_sock = self.__accept_new_connection()
+                    self.__handle_client_connection(client_sock)
+                except socket.timeout:
+                    continue
+                except OSError as e:
+                    if self._shutdown_requested:
+                        break
+                    logging.error(f"action: accept_connection | result: fail | error: {e}")
+        finally:
+            self.__cleanup()
+            
+    def __cleanup(self):
+        """
+        Cleanup server resources during shutdown
+        """
+        logging.info('action: shutting_down | result: in_progress')
+        
+        try:
+            self._server_socket.shutdown(socket.SHUT_RDWR)
+            self._server_socket.close()
+            logging.info('action: close_server_socket | result: success')
+        except OSError as e:
+            logging.error(f"action: close_server_socket | result: fail | error: {e}")
+                
+        logging.info('action: shutting_down | result: success')
 
     def __handle_client_connection(self, client_sock):
         """
