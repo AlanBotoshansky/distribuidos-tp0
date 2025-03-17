@@ -14,7 +14,7 @@ var log = logging.MustGetLogger("log")
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
-	ID            string
+	ID            uint32
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
@@ -76,7 +76,9 @@ func (c *Client) StartClientLoop() {
 		// Create the connection the server in every loop iteration. Send an
 		c.createClientSocket()
 
-		betMessage := communication.NewBetMessage("Santiago Lionel", "Lorca", "30904465", "1999-03-17", 7574)
+		nombre, apellido, dni, nacimiento, numero := "Santiago Lionel", "Lorca", "30904465", "1999-03-17", 7574
+		log.Infof("action: apuesta_enviada | result: in_progress | dni: %v | numero: %v", dni, numero)
+		betMessage := communication.NewBetMessage(c.config.ID, nombre, apellido, dni, nacimiento, uint32(numero))
 		betMessageBytes := communication.SerializeBet(betMessage)
 		err := communication.SendMessage(c.conn, betMessageBytes)
 

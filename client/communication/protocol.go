@@ -6,35 +6,34 @@ import (
 )
 
 const (
-	LenTotalSize = 4
-	LenMsgType   = 1
-	LenResult    = 1
+	LenMessageSize  = 2
+	MessageTypeSize = 1
+	HeaderSize      = LenMessageSize + MessageTypeSize
 
-	LenNombre     = 2
-	LenApellido   = 2
-	LenDni        = 2
-	LenNacimiento = 2
-	LenNumero     = 4
+	IdAgenciaSize   = 4
+	LenNombreSize   = 2
+	LenApellidoSize = 2
+	DniSize         = 8
+	NacimientoSize  = 10
+	NumeroSize      = 4
 )
 
 const (
-	MsgTypeBet = 1
-)
-
-const (
-	ResultSuccess = 0
+	MessageTypeBet = 1
 )
 
 type BetMessage struct {
+	IdAgencia  uint32
 	Nombre     string
 	Apellido   string
 	Dni        string
 	Nacimiento string
-	Numero     int32
+	Numero     uint32
 }
 
-func NewBetMessage(nombre, apellido, dni, nacimiento string, numero int32) BetMessage {
+func NewBetMessage(idAgencia uint32, nombre, apellido, dni, nacimiento string, numero uint32) BetMessage {
 	return BetMessage{
+		IdAgencia:  idAgencia,
 		Nombre:     nombre,
 		Apellido:   apellido,
 		Dni:        dni,
@@ -49,46 +48,43 @@ func SerializeBet(bet BetMessage) []byte {
 	dniBytes := []byte(bet.Dni)
 	nacimientoBytes := []byte(bet.Nacimiento)
 
-	totalSize := LenTotalSize + LenMsgType + LenResult
-	totalSize += LenNombre + len(nombreBytes)
-	totalSize += LenApellido + len(apellidoBytes)
-	totalSize += LenDni + len(dniBytes)
-	totalSize += LenNacimiento + len(nacimientoBytes)
-	totalSize += LenNumero
+	messageSize := 0
+	messageSize += IdAgenciaSize
+	messageSize += LenNombreSize + len(nombreBytes)
+	messageSize += LenApellidoSize + len(apellidoBytes)
+	messageSize += DniSize
+	messageSize += NacimientoSize
+	messageSize += NumeroSize
 
-	buffer := make([]byte, totalSize)
+	buffer := make([]byte, HeaderSize+messageSize)
 	pos := 0
 
-	binary.BigEndian.PutUint32(buffer[pos:LenTotalSize], uint32(totalSize))
-	pos += LenTotalSize
+	binary.BigEndian.PutUint16(buffer[pos:pos+LenMessageSize], uint16(messageSize))
+	pos += LenMessageSize
 
-	buffer[pos] = MsgTypeBet
-	pos += LenMsgType
+	buffer[pos] = MessageTypeBet
+	pos += MessageTypeSize
 
-	buffer[pos] = ResultSuccess
-	pos += LenResult
+	binary.BigEndian.PutUint32(buffer[pos:pos+IdAgenciaSize], bet.IdAgencia)
+	pos += IdAgenciaSize
 
-	binary.BigEndian.PutUint16(buffer[pos:pos+LenNombre], uint16(len(nombreBytes)))
-	pos += LenNombre
+	binary.BigEndian.PutUint16(buffer[pos:pos+LenNombreSize], uint16(len(nombreBytes)))
+	pos += LenNombreSize
 	copy(buffer[pos:pos+len(nombreBytes)], nombreBytes)
 	pos += len(nombreBytes)
 
-	binary.BigEndian.PutUint16(buffer[pos:pos+LenApellido], uint16(len(apellidoBytes)))
-	pos += LenApellido
+	binary.BigEndian.PutUint16(buffer[pos:pos+LenApellidoSize], uint16(len(apellidoBytes)))
+	pos += LenApellidoSize
 	copy(buffer[pos:pos+len(apellidoBytes)], apellidoBytes)
 	pos += len(apellidoBytes)
 
-	binary.BigEndian.PutUint16(buffer[pos:pos+LenDni], uint16(len(dniBytes)))
-	pos += LenDni
-	copy(buffer[pos:pos+len(dniBytes)], dniBytes)
-	pos += len(dniBytes)
+	copy(buffer[pos:pos+DniSize], dniBytes)
+	pos += DniSize
 
-	binary.BigEndian.PutUint16(buffer[pos:pos+LenNacimiento], uint16(len(nacimientoBytes)))
-	pos += LenNacimiento
-	copy(buffer[pos:pos+len(nacimientoBytes)], nacimientoBytes)
-	pos += len(nacimientoBytes)
+	copy(buffer[pos:pos+NacimientoSize], nacimientoBytes)
+	pos += NacimientoSize
 
-	binary.BigEndian.PutUint32(buffer[pos:pos+LenNumero], uint32(bet.Numero))
+	binary.BigEndian.PutUint32(buffer[pos:pos+NumeroSize], uint32(bet.Numero))
 
 	return buffer
 }

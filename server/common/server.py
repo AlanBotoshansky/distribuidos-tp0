@@ -1,7 +1,8 @@
 import socket
 import logging
 import signal
-
+import communication.protocol as protocol
+import common.utils as utils
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -68,15 +69,19 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
-        try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
+        try:            
+            packet = protocol.receive_packet(client_sock)
+            message = protocol.deserialize_message(packet)
+            
+            if isinstance(message, protocol.BetMessage):
+                logging.info(f'action: apuesta_almacenada | result: in_progress | dni: {message.dni} | numero: {message.numero}')
+                utils.store_bets([utils.Bet(message.id_agencia, message.nombre, message.apellido, message.dni, message.nacimiento, message.numero)])
+                logging.info(f'action: apuesta_almacenada | result: success | dni: {message.dni} | numero: {message.numero}')                
+            
             # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
-        except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            client_sock.send("{}\n".format(message.dni).encode('utf-8'))
+        except (OSError, ValueError) as e:
+            logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
             client_sock.close()
 
