@@ -25,6 +25,10 @@ services:
 EOF
 
 for ((i=1; i<=$NUM_CLIENTS; i++)); do
+    DAY=$(printf "%02d" $(( (i % 28) + 1 )))
+    MONTH=$(printf "%02d" $(( (i % 12) + 1 )))
+    DNI=$(printf "%08d" $(( 30000000 + i )))
+    
     cat >> "$OUTPUT_FILE" << EOF
   client$i:
     container_name: client$i
@@ -32,6 +36,11 @@ for ((i=1; i<=$NUM_CLIENTS; i++)); do
     entrypoint: /client
     environment:
       - CLI_ID=$i
+      - NOMBRE=Cliente${i}
+      - APELLIDO=Apellido${i}
+      - DOCUMENTO=${DNI}
+      - NACIMIENTO=1990-${MONTH}-${DAY}
+      - NUMERO=$(( 1000 + i ))
     volumes:
       - ./client/config.yaml:/config.yaml
     networks:

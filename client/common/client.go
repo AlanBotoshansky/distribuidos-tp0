@@ -2,6 +2,8 @@ package common
 
 import (
 	"net"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/op/go-logging"
@@ -36,6 +38,22 @@ func NewClient(config ClientConfig) *Client {
 	return client
 }
 
+// GetBetInfo Get the bet information from the environment variables
+func (c *Client) getBetInfo() (string, string, string, string, uint32) {
+	nombre := os.Getenv("NOMBRE")
+	apellido := os.Getenv("APELLIDO")
+	documento := os.Getenv("DOCUMENTO")
+	nacimiento := os.Getenv("NACIMIENTO")
+	numeroStr := os.Getenv("NUMERO")
+	numeroInt, err := strconv.ParseUint(numeroStr, 10, 32)
+	if err != nil {
+		log.Errorf("action: parse_numero | result: fail | error: %v", err)
+		numeroInt = 0
+	}
+
+	return nombre, apellido, documento, nacimiento, uint32(numeroInt)
+}
+
 // CreateClientSocket Initializes client socket. In case of
 // failure, error is printed in stdout/stderr and exit 1
 // is returned
@@ -47,6 +65,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -73,13 +92,16 @@ func (c *Client) StartClientLoop() {
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
 		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
+		err := c.createClientSocket()
+		if err != nil {
+			return
+		}
 
-		nombre, apellido, dni, nacimiento, numero := "Santiago Lionel", "Lorca", "30904465", "1999-03-17", 7574
+		nombre, apellido, dni, nacimiento, numero := c.getBetInfo()
 		log.Infof("action: apuesta_enviada | result: in_progress | dni: %v | numero: %v", dni, numero)
 		betMessage := communication.NewBetMessage(c.config.ID, nombre, apellido, dni, nacimiento, uint32(numero))
 		betMessageBytes := communication.SerializeBet(betMessage)
-		err := communication.SendPacket(c.conn, betMessageBytes)
+		err = communication.SendPacket(c.conn, betMessageBytes)
 
 		if err != nil {
 			log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | error: %v",
