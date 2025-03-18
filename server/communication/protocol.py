@@ -11,8 +11,11 @@ DNI_SIZE = 8
 NACIMIENTO_SIZE = 10
 NUMERO_SIZE = 4
 
+RESULT_SIZE = 1
+
 class MessageType(IntEnum):
     BET = 1
+    BET_CONFIRMATION = 2
 
 class BetMessage:
     def __init__(self, id_agencia, nombre, apellido, dni, nacimiento, numero):
@@ -43,7 +46,7 @@ def receive_packet(sock):
     return buf_packet
 
 
-def deserialize_message(packet):
+def deserialize_packet(packet):
     """ Deserializes a message from a packet (bytearray) """
     message_type = MessageType(packet[LEN_MESSAGE_SIZE])
     pos = HEADER_SIZE
@@ -72,3 +75,23 @@ def deserialize_message(packet):
         return BetMessage(id_agencia, nombre, apellido, dni, nacimiento, numero)
     else:
         raise ValueError("Invalid message type")
+
+class BetConfirmationResult(IntEnum):
+    OK = 0
+    ERROR = 1
+    
+class BetConfirmationMessage:
+    def __init__(self, result):
+        self.result = result
+    
+    def serialize(self):
+        """ Serializes the message to a bytearray """
+        message_size = RESULT_SIZE.to_bytes(LEN_MESSAGE_SIZE, byteorder="big")
+        message_type = MessageType.BET_CONFIRMATION.to_bytes(MESSAGE_TYPE_SIZE, byteorder="big")
+        result_bytes = self.result.to_bytes(RESULT_SIZE, byteorder="big")
+        return message_size + message_type + result_bytes
+
+def send_message(sock, message):
+    """ Sends a message through a socket """
+    packet = message.serialize()
+    sock.sendall(packet)

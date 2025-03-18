@@ -1,7 +1,6 @@
 package common
 
 import (
-	"bufio"
 	"net"
 	"time"
 
@@ -80,17 +79,17 @@ func (c *Client) StartClientLoop() {
 		log.Infof("action: apuesta_enviada | result: in_progress | dni: %v | numero: %v", dni, numero)
 		betMessage := communication.NewBetMessage(c.config.ID, nombre, apellido, dni, nacimiento, uint32(numero))
 		betMessageBytes := communication.SerializeBet(betMessage)
-		err := communication.SendMessage(c.conn, betMessageBytes)
+		err := communication.SendPacket(c.conn, betMessageBytes)
 
 		if err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
+			log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | error: %v",
 				c.config.ID,
 				err,
 			)
 			return
 		}
 
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
+		packet, err := communication.ReceivePacket(c.conn)
 
 		if c.conn != nil {
 			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
@@ -100,17 +99,38 @@ func (c *Client) StartClientLoop() {
 		}
 
 		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
+			log.Errorf("action: receive_packet | result: fail | client_id: %v | error: %v",
 				c.config.ID,
 				err,
 			)
 			return
 		}
 
-		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
+		log.Infof("action: receive_packet | result: success | client_id: %v | msg: %v",
 			c.config.ID,
-			msg,
+			packet,
 		)
+
+		msg, err := communication.DeserializePacket(packet)
+
+		if err != nil {
+			log.Errorf("action: deserialize_packet | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return
+		}
+
+		betConfirmation, ok := msg.(communication.BetConfirmationMessage)
+		if ok {
+			log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", dni, numero)
+		}
+
+		if betConfirmation.Result == communication.BetConfirmationResultOk {
+			log.Infof("action: apuesta_almacenada | result: success | dni: %v | numero: %v", dni, numero)
+		} else {
+			log.Infof("action: apuesta_almacenada | result: fail | dni: %v | numero: %v", dni, numero)
+		}
 
 		// Wait a time between sending one message and the next one
 		// Use select to either wait for the period or for shutdown signal

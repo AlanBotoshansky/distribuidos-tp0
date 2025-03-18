@@ -71,17 +71,25 @@ class Server:
         """
         try:            
             packet = protocol.receive_packet(client_sock)
-            message = protocol.deserialize_message(packet)
+            message = protocol.deserialize_packet(packet)
+        except (OSError, ConnectionError) as e:
+            logging.error(f"action: receive_message | result: fail | error: {e}")
+            client_sock.close()
+            return
+        except ValueError as e:
+            logging.error(f"action: deserialize_packet | result: fail | error: {e}")
+            client_sock.close()
+            return
             
+        try:
             if isinstance(message, protocol.BetMessage):
                 logging.info(f'action: apuesta_almacenada | result: in_progress | dni: {message.dni} | numero: {message.numero}')
                 utils.store_bets([utils.Bet(message.id_agencia, message.nombre, message.apellido, message.dni, message.nacimiento, message.numero)])
-                logging.info(f'action: apuesta_almacenada | result: success | dni: {message.dni} | numero: {message.numero}')                
-            
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(message.dni).encode('utf-8'))
-        except (OSError, ValueError) as e:
-            logging.error(f"action: receive_message | result: fail | error: {e}")
+                logging.info(f'action: apuesta_almacenada | result: success | dni: {message.dni} | numero: {message.numero}')
+                protocol.send_message(client_sock, protocol.BetConfirmationMessage(protocol.BetConfirmationResult.OK))
+        except OSError as e:
+            logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
+            protocol.send_message(client_sock, protocol.BetConfirmationMessage(protocol.BetConfirmationResult.ERROR))
         finally:
             client_sock.close()
 
