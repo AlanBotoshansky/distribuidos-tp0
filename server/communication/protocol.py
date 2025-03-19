@@ -5,8 +5,8 @@ MESSAGE_TYPE_SIZE = 1
 HEADER_SIZE = LEN_MESSAGE_SIZE + MESSAGE_TYPE_SIZE
 
 ID_AGENCIA_SIZE = 4
-LEN_NOMBRE_SIZE = 2
-LEN_APELLIDO_SIZE = 2
+NOMBRE_SIZE = 50
+APELLIDO_SIZE = 50
 DNI_SIZE = 8
 NACIMIENTO_SIZE = 10
 NUMERO_SIZE = 4
@@ -54,15 +54,11 @@ def deserialize_packet(packet):
         id_agencia = int.from_bytes(packet[pos:pos + ID_AGENCIA_SIZE], byteorder="big")
         pos += ID_AGENCIA_SIZE
         
-        nombre_size = int.from_bytes(packet[pos:pos + LEN_NOMBRE_SIZE], byteorder="big")
-        pos += LEN_NOMBRE_SIZE
-        nombre = packet[pos:pos + nombre_size].decode("utf-8")
-        pos += nombre_size
+        nombre = packet[pos:pos + NOMBRE_SIZE].decode("utf-8")
+        pos += NOMBRE_SIZE
         
-        apellido_size = int.from_bytes(packet[pos:pos + LEN_APELLIDO_SIZE], byteorder="big")
-        pos += LEN_APELLIDO_SIZE
-        apellido = packet[pos:pos + apellido_size].decode("utf-8")
-        pos += apellido_size
+        apellido = packet[pos:pos + APELLIDO_SIZE].decode("utf-8")
+        pos += APELLIDO_SIZE
         
         dni = packet[pos:pos + DNI_SIZE].decode("utf-8")
         pos += DNI_SIZE
