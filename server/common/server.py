@@ -4,6 +4,8 @@ import signal
 import communication.protocol as protocol
 import common.utils as utils
 
+SOCKET_TIMEOUT = 1
+
 class Server:
     def __init__(self, port, listen_backlog):
         # Initialize server socket
@@ -33,8 +35,8 @@ class Server:
         The loop will continue until a SIGTERM signal is received.
         """
         try:
+            self._server_socket.settimeout(SOCKET_TIMEOUT)
             while not self._shutdown_requested:
-                self._server_socket.settimeout(1)
                 try:
                     client_sock = self.__accept_new_connection()
                     self.__handle_client_connection(client_sock)
