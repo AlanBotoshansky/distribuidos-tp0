@@ -73,7 +73,7 @@ class Server:
         """
         try:            
             packet = protocol.receive_packet(client_sock)
-            bets = protocol.deserialize_packet(packet)
+            message = protocol.deserialize_packet(packet)
         except (OSError, ConnectionError) as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
             client_sock.close()
@@ -82,16 +82,13 @@ class Server:
             logging.error(f"action: deserialize_packet | result: fail | error: {e}")
             client_sock.close()
             return
-            
-        try:
-            utils.store_bets(bets)
-            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
-            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.OK))
-        except OSError as e:
-            logging.info(f'action: apuesta_recibida | result: fail | cantidad: {len(bets)}')
-            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.ERROR))
-        finally:
-            client_sock.close()
+        
+        if isinstance(message, list) and all(isinstance(bet, utils.Bet) for bet in message):
+            self.__handle_bets(message, client_sock)
+        elif isinstance(message, protocol.FinishedSendingBetsMessage):
+            self.__handle_finished_sending_bets(message)
+        
+        client_sock.close()
 
     def __accept_new_connection(self):
         """
@@ -106,3 +103,26 @@ class Server:
         c, addr = self._server_socket.accept()
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
+
+    def __handle_bets(self, bets, client_sock):
+        """
+        Handle bets received from a client
+
+        Function that receives a list of bets and stores them in a file
+        """
+        try:
+            utils.store_bets(bets)
+            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
+            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.OK))
+        except OSError as e:
+            logging.info(f'action: apuesta_recibida | result: fail | cantidad: {len(bets)}')
+            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.ERROR))
+
+    def __handle_finished_sending_bets(self, finished_sending_bets_message):
+        """
+        Handle finished sending bets message
+
+        Function that receives a message from a client indicating that
+        all bets have been sent
+        """
+        logging.info(f'action: total_apuestas_recibidas | result: success | id_agencia: {finished_sending_bets_message.id_agencia}')

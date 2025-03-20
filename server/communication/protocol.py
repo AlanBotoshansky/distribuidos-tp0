@@ -17,6 +17,11 @@ RESULT_SIZE = 1
 class MessageType(IntEnum):
     BETS = 1
     BETS_CONFIRMATION = 2
+    FINISHED_SENDING_BETS = 3
+    
+class FinishedSendingBetsMessage:
+    def __init__(self, id_agencia):
+        self.id_agencia = id_agencia
 
 def receive_packet(sock):
     """ Receives a packet from a socket """
@@ -43,6 +48,8 @@ def deserialize_packet(packet):
     message_type = MessageType(packet[LEN_MESSAGE_SIZE])
     if message_type == MessageType.BETS:
         return deserialize_bets(packet[HEADER_SIZE:])
+    elif message_type == MessageType.FINISHED_SENDING_BETS:
+        return deserialize_finished_sending_bets(packet[HEADER_SIZE:])
     else:
         raise ValueError("Invalid message type")
     
@@ -79,6 +86,10 @@ def deserialize_bets(bets_message_bytes):
         bets.append(Bet(id_agencia, nombre, apellido, dni, nacimiento, numero))
     
     return bets
+
+def deserialize_finished_sending_bets(finished_sending_bets_message_bytes):
+    id_agencia = int.from_bytes(finished_sending_bets_message_bytes, byteorder="big")
+    return FinishedSendingBetsMessage(id_agencia)
 
 class BetsConfirmationResult(IntEnum):
     OK = 0
