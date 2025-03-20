@@ -14,6 +14,8 @@ import (
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/communication"
 )
 
+const RecordsToCheckShutdown = 500
+
 var log = logging.MustGetLogger("log")
 
 // ClientConfig Configuration used by the client
@@ -53,7 +55,18 @@ func (c *Client) ReadBetsFromCSV() ([]communication.Bet, error) {
 
 	bets := make([]communication.Bet, 0)
 	reader := csv.NewReader(file)
+	recordCount := 0
+
 	for {
+		if recordCount%RecordsToCheckShutdown == 0 {
+			select {
+			case <-c.shutdownChan:
+				log.Infof("action: read_bets_interrumpted | result: succes | client_id: %v", c.config.ID)
+				return nil, fmt.Errorf("shutdown requested")
+			default:
+			}
+		}
+
 		bet_record, err := reader.Read()
 		if err == io.EOF {
 			break
@@ -62,6 +75,9 @@ func (c *Client) ReadBetsFromCSV() ([]communication.Bet, error) {
 			log.Errorf("action: read_bet_record | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			continue
 		}
+
+		recordCount += 1
+
 		if len(bet_record) != 5 {
 			log.Errorf("action: read_bet_record | result: fail | client_id: %v | error: invalid record length", c.config.ID)
 			continue
@@ -119,6 +135,14 @@ func (c *Client) StartClientLoop() {
 	if err != nil {
 		return
 	}
+
+	select {
+	case <-c.shutdownChan:
+		log.Infof("action: client_interrumpted | result: success | client_id: %v", c.config.ID)
+		return
+	default:
+	}
+
 	betsSent := 0
 	for betsSent < len(bets) {
 		err := c.createClientSocket()
