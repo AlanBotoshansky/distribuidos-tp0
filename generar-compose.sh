@@ -43,6 +43,7 @@ for ((i=1; i<=$NUM_CLIENTS; i++)); do
       - NUMERO=$(( 1000 + i ))
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./.data/agency-$i.csv:/.data/agency-$i.csv
     networks:
       - testing_net
     depends_on:
