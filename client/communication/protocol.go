@@ -12,8 +12,8 @@ const (
 	HeaderSize      = LenMessageSize + MessageTypeSize
 
 	IdAgenciaSize  = 4
-	NombreSize     = 50
-	ApellidoSize   = 50
+	NombreSize     = 32
+	ApellidoSize   = 32
 	DniSize        = 8
 	NacimientoSize = 10
 	NumeroSize     = 4
