@@ -73,7 +73,7 @@ class Server:
         """
         try:            
             packet = protocol.receive_packet(client_sock)
-            message = protocol.deserialize_packet(packet)
+            bets = protocol.deserialize_packet(packet)
         except (OSError, ConnectionError) as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
             client_sock.close()
@@ -84,14 +84,12 @@ class Server:
             return
             
         try:
-            if isinstance(message, protocol.BetMessage):
-                logging.info(f'action: apuesta_almacenada | result: in_progress | dni: {message.dni} | numero: {message.numero}')
-                utils.store_bets([utils.Bet(message.id_agencia, message.nombre, message.apellido, message.dni, message.nacimiento, message.numero)])
-                logging.info(f'action: apuesta_almacenada | result: success | dni: {message.dni} | numero: {message.numero}')
-                protocol.send_message(client_sock, protocol.BetConfirmationMessage(protocol.BetConfirmationResult.OK))
+            utils.store_bets(bets)
+            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
+            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.OK))
         except OSError as e:
-            logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
-            protocol.send_message(client_sock, protocol.BetConfirmationMessage(protocol.BetConfirmationResult.ERROR))
+            logging.info(f'action: apuesta_recibida | result: fail | cantidad: {len(bets)}')
+            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.ERROR))
         finally:
             client_sock.close()
 

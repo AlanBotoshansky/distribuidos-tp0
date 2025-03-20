@@ -1,4 +1,5 @@
 from enum import IntEnum
+from common.utils import Bet
 
 LEN_MESSAGE_SIZE = 2
 MESSAGE_TYPE_SIZE = 1
@@ -14,17 +15,8 @@ NUMERO_SIZE = 4
 RESULT_SIZE = 1
 
 class MessageType(IntEnum):
-    BET = 1
-    BET_CONFIRMATION = 2
-
-class BetMessage:
-    def __init__(self, id_agencia, nombre, apellido, dni, nacimiento, numero):
-        self.id_agencia = id_agencia
-        self.nombre = nombre
-        self.apellido = apellido
-        self.dni = dni
-        self.nacimiento = nacimiento
-        self.numero = numero
+    BETS = 1
+    BETS_CONFIRMATION = 2
 
 def receive_packet(sock):
     """ Receives a packet from a socket """
@@ -49,41 +41,57 @@ def receive_packet(sock):
 def deserialize_packet(packet):
     """ Deserializes a message from a packet (bytearray) """
     message_type = MessageType(packet[LEN_MESSAGE_SIZE])
-    pos = HEADER_SIZE
-    if message_type == MessageType.BET:
-        id_agencia = int.from_bytes(packet[pos:pos + ID_AGENCIA_SIZE], byteorder="big")
-        pos += ID_AGENCIA_SIZE
-        
-        nombre = packet[pos:pos + NOMBRE_SIZE].decode("utf-8")
-        pos += NOMBRE_SIZE
-        
-        apellido = packet[pos:pos + APELLIDO_SIZE].decode("utf-8")
-        pos += APELLIDO_SIZE
-        
-        dni = packet[pos:pos + DNI_SIZE].decode("utf-8")
-        pos += DNI_SIZE
-        
-        nacimiento = packet[pos:pos + NACIMIENTO_SIZE].decode("utf-8")
-        pos += NACIMIENTO_SIZE
-        
-        numero = int.from_bytes(packet[pos:pos + NUMERO_SIZE], byteorder="big")
-        
-        return BetMessage(id_agencia, nombre, apellido, dni, nacimiento, numero)
+    if message_type == MessageType.BETS:
+        return deserialize_bets(packet[HEADER_SIZE:])
     else:
         raise ValueError("Invalid message type")
+    
+def deserialize_bets(bets_message_bytes):
+    pos = 0
+    bytes_deserialized = 0
+    bets = []
+    
+    id_agencia = int.from_bytes(bets_message_bytes[pos:pos + ID_AGENCIA_SIZE], byteorder="big")
+    pos += ID_AGENCIA_SIZE
+    bytes_deserialized += ID_AGENCIA_SIZE
+    
+    while bytes_deserialized < len(bets_message_bytes):
+        nombre = bets_message_bytes[pos:pos + NOMBRE_SIZE].decode("utf-8")
+        pos += NOMBRE_SIZE
+        bytes_deserialized += NOMBRE_SIZE
+        
+        apellido = bets_message_bytes[pos:pos + APELLIDO_SIZE].decode("utf-8")
+        pos += APELLIDO_SIZE
+        bytes_deserialized += APELLIDO_SIZE
+        
+        dni = bets_message_bytes[pos:pos + DNI_SIZE].decode("utf-8")
+        pos += DNI_SIZE
+        bytes_deserialized += DNI_SIZE
+        
+        nacimiento = bets_message_bytes[pos:pos + NACIMIENTO_SIZE].decode("utf-8")
+        pos += NACIMIENTO_SIZE
+        bytes_deserialized += NACIMIENTO_SIZE
+        
+        numero = int.from_bytes(bets_message_bytes[pos:pos + NUMERO_SIZE], byteorder="big")
+        pos += NUMERO_SIZE
+        bytes_deserialized += NUMERO_SIZE
+    
+        bets.append(Bet(id_agencia, nombre, apellido, dni, nacimiento, numero))
+    
+    return bets
 
-class BetConfirmationResult(IntEnum):
+class BetsConfirmationResult(IntEnum):
     OK = 0
     ERROR = 1
     
-class BetConfirmationMessage:
+class BetsConfirmationMessage:
     def __init__(self, result):
         self.result = result
     
     def serialize(self):
         """ Serializes the message to a bytearray """
         message_size = RESULT_SIZE.to_bytes(LEN_MESSAGE_SIZE, byteorder="big")
-        message_type = MessageType.BET_CONFIRMATION.to_bytes(MESSAGE_TYPE_SIZE, byteorder="big")
+        message_type = MessageType.BETS_CONFIRMATION.to_bytes(MESSAGE_TYPE_SIZE, byteorder="big")
         result_bytes = self.result.to_bytes(RESULT_SIZE, byteorder="big")
         return message_size + message_type + result_bytes
 

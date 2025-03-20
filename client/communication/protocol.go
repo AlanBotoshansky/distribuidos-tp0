@@ -20,17 +20,16 @@ const (
 )
 
 const (
-	MessageTypeBet             = 1
-	MessageTypeBetConfirmation = 2
+	MessageTypeBets             = 1
+	MessageTypeBetsConfirmation = 2
 )
 
 const (
-	BetConfirmationResultOk    = 0
-	BetConfirmationResultError = 1
+	BetsConfirmationResultOk    = 0
+	BetsConfirmationResultError = 1
 )
 
-type BetMessage struct {
-	IdAgencia  uint32
+type Bet struct {
 	Nombre     string
 	Apellido   string
 	Dni        string
@@ -38,9 +37,8 @@ type BetMessage struct {
 	Numero     uint32
 }
 
-func NewBetMessage(idAgencia uint32, nombre, apellido, dni, nacimiento string, numero uint32) BetMessage {
-	return BetMessage{
-		IdAgencia:  idAgencia,
+func NewBet(nombre, apellido, dni, nacimiento string, numero uint32) Bet {
+	return Bet{
 		Nombre:     nombre,
 		Apellido:   apellido,
 		Dni:        dni,
@@ -49,31 +47,21 @@ func NewBetMessage(idAgencia uint32, nombre, apellido, dni, nacimiento string, n
 	}
 }
 
-func SerializeBet(bet BetMessage) []byte {
+func SerializeBet(bet Bet) []byte {
 	nombreBytes := []byte(bet.Nombre)
 	apellidoBytes := []byte(bet.Apellido)
 	dniBytes := []byte(bet.Dni)
 	nacimientoBytes := []byte(bet.Nacimiento)
 
-	messageSize := 0
-	messageSize += IdAgenciaSize
-	messageSize += NombreSize
-	messageSize += ApellidoSize
-	messageSize += DniSize
-	messageSize += NacimientoSize
-	messageSize += NumeroSize
+	betSize := 0
+	betSize += NombreSize
+	betSize += ApellidoSize
+	betSize += DniSize
+	betSize += NacimientoSize
+	betSize += NumeroSize
 
-	buffer := make([]byte, HeaderSize+messageSize)
+	buffer := make([]byte, betSize)
 	pos := 0
-
-	binary.BigEndian.PutUint16(buffer[pos:pos+LenMessageSize], uint16(messageSize))
-	pos += LenMessageSize
-
-	buffer[pos] = MessageTypeBet
-	pos += MessageTypeSize
-
-	binary.BigEndian.PutUint32(buffer[pos:pos+IdAgenciaSize], bet.IdAgencia)
-	pos += IdAgenciaSize
 
 	copy(buffer[pos:pos+NombreSize], nombreBytes)
 	pos += NombreSize
@@ -92,6 +80,46 @@ func SerializeBet(bet BetMessage) []byte {
 	return buffer
 }
 
+type Bets struct {
+	IdAgencia uint32
+	Bets      []Bet
+}
+
+func NewBets(idAgencia uint32, bets []Bet) Bets {
+	return Bets{
+		IdAgencia: idAgencia,
+		Bets:      bets,
+	}
+}
+
+func SerializeBets(bets Bets) []byte {
+	messageSize := 0
+	messageSize += IdAgenciaSize
+
+	betsBytes := make([]byte, 0)
+	for _, bet := range bets.Bets {
+		betBytes := SerializeBet(bet)
+		betsBytes = append(betsBytes, betBytes...)
+		messageSize += len(betBytes)
+	}
+
+	buffer := make([]byte, HeaderSize+messageSize)
+	pos := 0
+
+	binary.BigEndian.PutUint16(buffer[pos:pos+LenMessageSize], uint16(messageSize))
+	pos += LenMessageSize
+
+	buffer[pos] = MessageTypeBets
+	pos += MessageTypeSize
+
+	binary.BigEndian.PutUint32(buffer[pos:pos+IdAgenciaSize], bets.IdAgencia)
+	pos += IdAgenciaSize
+
+	copy(buffer[pos:], betsBytes)
+
+	return buffer
+}
+
 func SendPacket(conn net.Conn, packet []byte) error {
 	bytesWritten := 0
 	for bytesWritten < len(packet) {
@@ -104,12 +132,12 @@ func SendPacket(conn net.Conn, packet []byte) error {
 	return nil
 }
 
-type BetConfirmationMessage struct {
+type BetsConfirmationMessage struct {
 	Result uint8
 }
 
-func NewBetConfirmationMessage(result uint8) BetConfirmationMessage {
-	return BetConfirmationMessage{
+func NewBetsConfirmationMessage(result uint8) BetsConfirmationMessage {
+	return BetsConfirmationMessage{
 		Result: result,
 	}
 }
@@ -150,15 +178,15 @@ func (e *InvalidMessageTypeError) Error() string {
 func DeserializePacket(packet []byte) (interface{}, error) {
 	messageType := uint8(packet[LenMessageSize])
 	switch messageType {
-	case MessageTypeBetConfirmation:
-		return DeserializeBetConfirmation(packet), nil
+	case MessageTypeBetsConfirmation:
+		return DeserializeBetsConfirmation(packet), nil
 	default:
 		return 0, &InvalidMessageTypeError{MessageType: messageType}
 	}
 }
 
-func DeserializeBetConfirmation(packet []byte) BetConfirmationMessage {
-	return BetConfirmationMessage{
+func DeserializeBetsConfirmation(packet []byte) BetsConfirmationMessage {
+	return BetsConfirmationMessage{
 		Result: packet[HeaderSize],
 	}
 }
