@@ -5,6 +5,7 @@ import communication.protocol as protocol
 import common.utils as utils
 
 SOCKET_TIMEOUT = 1
+TOTAL_AGENCIES = 5
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -13,6 +14,9 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._shutdown_requested = False
+        self._finished_agencies = set()
+        self._winning_bets_by_agency = {}
+        self._lottery_done = False
         
         signal.signal(signal.SIGTERM, self.__handle_signal)
         logging.info('action: setup_signal | result: success | signal: SIGTERM')
@@ -125,4 +129,20 @@ class Server:
         Function that receives a message from a client indicating that
         all bets have been sent
         """
-        logging.info(f'action: total_apuestas_recibidas | result: success | id_agencia: {finished_sending_bets_message.id_agencia}')
+        agency_id = finished_sending_bets_message.id_agencia
+        logging.info(f'action: total_apuestas_recibidas | result: success | id_agencia: {agency_id}')
+        self._finished_agencies.add(agency_id)
+        if len(self._finished_agencies) == TOTAL_AGENCIES:
+            self._do_lottery()
+            
+    def _do_lottery(self):
+        try:
+            for bet in utils.load_bets():
+                if utils.has_won(bet):
+                    winning_bets = self._winning_bets_by_agency.get(bet.agency, [])
+                    winning_bets.append(bet)
+                    self._winning_bets_by_agency[bet.agency] = winning_bets
+            self._lottery_done = True
+            logging.info("action: sorteo | result: success")
+        except OSError as e:
+            logging.error(f"action: sorteo | result: fail | error: {e}")       
