@@ -11,12 +11,12 @@ const (
 	MessageTypeSize = 1
 	HeaderSize      = LenMessageSize + MessageTypeSize
 
-	IdAgenciaSize  = 4
-	NombreSize     = 32
-	ApellidoSize   = 32
-	DniSize        = 8
-	NacimientoSize = 10
-	NumeroSize     = 4
+	IdAgenciaSize   = 4
+	LenNombreSize   = 1
+	LenApellidoSize = 1
+	DniSize         = 8
+	NacimientoSize  = 10
+	NumeroSize      = 4
 )
 
 const (
@@ -57,8 +57,8 @@ func SerializeBet(bet BetMessage) []byte {
 
 	messageSize := 0
 	messageSize += IdAgenciaSize
-	messageSize += NombreSize
-	messageSize += ApellidoSize
+	messageSize += LenNombreSize + len(nombreBytes)
+	messageSize += LenApellidoSize + len(apellidoBytes)
 	messageSize += DniSize
 	messageSize += NacimientoSize
 	messageSize += NumeroSize
@@ -75,11 +75,15 @@ func SerializeBet(bet BetMessage) []byte {
 	binary.BigEndian.PutUint32(buffer[pos:pos+IdAgenciaSize], bet.IdAgencia)
 	pos += IdAgenciaSize
 
-	copy(buffer[pos:pos+NombreSize], nombreBytes)
-	pos += NombreSize
+	buffer[pos] = uint8(len(nombreBytes))
+	pos += LenNombreSize
+	copy(buffer[pos:pos+len(nombreBytes)], nombreBytes)
+	pos += len(nombreBytes)
 
-	copy(buffer[pos:pos+ApellidoSize], apellidoBytes)
-	pos += ApellidoSize
+	buffer[pos] = uint8(len(apellidoBytes))
+	pos += LenApellidoSize
+	copy(buffer[pos:pos+len(apellidoBytes)], apellidoBytes)
+	pos += len(apellidoBytes)
 
 	copy(buffer[pos:pos+DniSize], dniBytes)
 	pos += DniSize
