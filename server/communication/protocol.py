@@ -6,8 +6,8 @@ MESSAGE_TYPE_SIZE = 1
 HEADER_SIZE = LEN_MESSAGE_SIZE + MESSAGE_TYPE_SIZE
 
 ID_AGENCIA_SIZE = 4
-NOMBRE_SIZE = 32
-APELLIDO_SIZE = 32
+LEN_NOMBRE_SIZE = 1
+LEN_APELLIDO_SIZE = 1
 DNI_SIZE = 8
 NACIMIENTO_SIZE = 10
 NUMERO_SIZE = 4
@@ -63,13 +63,19 @@ def deserialize_bets(bets_message_bytes):
     bytes_deserialized += ID_AGENCIA_SIZE
     
     while bytes_deserialized < len(bets_message_bytes):
-        nombre = bets_message_bytes[pos:pos + NOMBRE_SIZE].decode("utf-8")
-        pos += NOMBRE_SIZE
-        bytes_deserialized += NOMBRE_SIZE
+        nombre_size = int.from_bytes(bets_message_bytes[pos:pos + LEN_NOMBRE_SIZE], byteorder="big")
+        pos += LEN_NOMBRE_SIZE
+        bytes_deserialized += LEN_NOMBRE_SIZE
+        nombre = bets_message_bytes[pos:pos + nombre_size].decode("utf-8")
+        pos += nombre_size
+        bytes_deserialized += nombre_size
         
-        apellido = bets_message_bytes[pos:pos + APELLIDO_SIZE].decode("utf-8")
-        pos += APELLIDO_SIZE
-        bytes_deserialized += APELLIDO_SIZE
+        apellido_size = int.from_bytes(bets_message_bytes[pos:pos + LEN_APELLIDO_SIZE], byteorder="big")
+        pos += LEN_APELLIDO_SIZE
+        bytes_deserialized += LEN_APELLIDO_SIZE
+        apellido = bets_message_bytes[pos:pos + apellido_size].decode("utf-8")
+        pos += apellido_size
+        bytes_deserialized += apellido_size
         
         dni = bets_message_bytes[pos:pos + DNI_SIZE].decode("utf-8")
         pos += DNI_SIZE
