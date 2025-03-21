@@ -12,13 +12,16 @@ DNI_SIZE = 8
 NACIMIENTO_SIZE = 10
 NUMERO_SIZE = 4
 
-RESULT_SIZE = 1
+BETS_CONFIRMATION_RESULT_SIZE = 1
+
+LOTTERY_WINNERS_RESPONSE_STATUS_SIZE = 1
 
 class MessageType(IntEnum):
     BETS = 1
     BETS_CONFIRMATION = 2
     FINISHED_SENDING_BETS = 3
     LOTTERY_WINNERS_REQUEST = 4
+    LOTTERY_WINNERS_RESPONSE = 5
     
 class FinishedSendingBetsMessage:
     def __init__(self, id_agencia):
@@ -118,10 +121,32 @@ class BetsConfirmationMessage:
     
     def serialize(self):
         """ Serializes the message to a bytearray """
-        message_size = RESULT_SIZE.to_bytes(LEN_MESSAGE_SIZE, byteorder="big")
-        message_type = MessageType.BETS_CONFIRMATION.to_bytes(MESSAGE_TYPE_SIZE, byteorder="big")
-        result_bytes = self.result.to_bytes(RESULT_SIZE, byteorder="big")
-        return message_size + message_type + result_bytes
+        message_size_bytes = BETS_CONFIRMATION_RESULT_SIZE.to_bytes(LEN_MESSAGE_SIZE, byteorder="big")
+        message_type_bytes = MessageType.BETS_CONFIRMATION.to_bytes(MESSAGE_TYPE_SIZE, byteorder="big")
+        result_bytes = self.result.to_bytes(BETS_CONFIRMATION_RESULT_SIZE, byteorder="big")
+        return message_size_bytes + message_type_bytes + result_bytes
+
+class LotteryWinnersResponseStatus(IntEnum):
+    READY = 0
+    NOT_READY = 1
+
+class LotteryWinnersResponseMessage:
+    def __init__(self, status, winners_dnis=[]):
+        self.status = status
+        self.winners_dnis = winners_dnis
+        
+    def serialize(self):
+        """ Serializes the message to a bytearray """
+        message_size = LOTTERY_WINNERS_RESPONSE_STATUS_SIZE + len(self.winners_dnis) * DNI_SIZE
+        message_size_bytes = message_size.to_bytes(LEN_MESSAGE_SIZE, byteorder="big")
+        message_type_bytes = MessageType.LOTTERY_WINNERS_RESPONSE.to_bytes(MESSAGE_TYPE_SIZE, byteorder="big")
+        status_bytes = self.status.to_bytes(LOTTERY_WINNERS_RESPONSE_STATUS_SIZE, byteorder="big")
+        if self.status == LotteryWinnersResponseStatus.NOT_READY:
+            return message_size_bytes + message_type_bytes + status_bytes
+        dnis_bytes = []
+        for dni in self.winners_dnis:
+            dnis_bytes.append(dni.encode("utf-8"))
+        return message_size_bytes + message_type_bytes + status_bytes + b"".join(dnis_bytes)
 
 def send_message(sock, message):
     """ Sends a message through a socket """

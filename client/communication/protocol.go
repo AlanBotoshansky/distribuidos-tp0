@@ -10,7 +10,17 @@ const (
 	LenMessageSize  = 2
 	MessageTypeSize = 1
 	HeaderSize      = LenMessageSize + MessageTypeSize
+)
 
+const (
+	MessageTypeBets                   = 1
+	MessageTypeBetsConfirmation       = 2
+	MessageTypeFinishedSendingBets    = 3
+	MessageTypeLotteryWinnersRequest  = 4
+	MessageTypeLotteryWinnersResponse = 5
+)
+
+const (
 	IdAgenciaSize   = 4
 	LenNombreSize   = 1
 	LenApellidoSize = 1
@@ -20,15 +30,15 @@ const (
 )
 
 const (
-	MessageTypeBets                  = 1
-	MessageTypeBetsConfirmation      = 2
-	MessageTypeFinishedSendingBets   = 3
-	MessageTypeLotteryWinnersRequest = 4
-)
-
-const (
 	BetsConfirmationResultOk    = 0
 	BetsConfirmationResultError = 1
+)
+
+const LotteryWinnersResponseStatusSize = 1
+
+const (
+	LotteryWinnersResponseStatusReady    = 0
+	LotteryWinnersResponseStatusNotReady = 1
 )
 
 type Bet struct {
@@ -202,6 +212,18 @@ func NewBetsConfirmationMessage(result uint8) BetsConfirmationMessage {
 	}
 }
 
+type LotteryWinnersResponseMessage struct {
+	Status      uint8
+	WinnersDnis []string
+}
+
+func NewLotteryWinnersResponseMessage(status uint8, winnersDnis []string) LotteryWinnersResponseMessage {
+	return LotteryWinnersResponseMessage{
+		Status:      status,
+		WinnersDnis: winnersDnis,
+	}
+}
+
 func ReceivePacket(conn net.Conn) ([]byte, error) {
 	bufPacket := make([]byte, 0)
 	for len(bufPacket) < HeaderSize {
@@ -240,6 +262,8 @@ func DeserializePacket(packet []byte) (interface{}, error) {
 	switch messageType {
 	case MessageTypeBetsConfirmation:
 		return DeserializeBetsConfirmation(packet), nil
+	case MessageTypeLotteryWinnersResponse:
+		return DeserializeLotteryWinnersResponse(packet), nil
 	default:
 		return 0, &InvalidMessageTypeError{MessageType: messageType}
 	}
@@ -249,4 +273,19 @@ func DeserializeBetsConfirmation(packet []byte) BetsConfirmationMessage {
 	return BetsConfirmationMessage{
 		Result: packet[HeaderSize],
 	}
+}
+
+func DeserializeLotteryWinnersResponse(packet []byte) LotteryWinnersResponseMessage {
+	status := packet[HeaderSize]
+	if status == LotteryWinnersResponseStatusNotReady {
+		return NewLotteryWinnersResponseMessage(status, nil)
+	}
+	winnersDnis := make([]string, 0)
+	pos := HeaderSize + LotteryWinnersResponseStatusSize
+	for pos < len(packet) {
+		winnerDni := string(packet[pos : pos+DniSize])
+		winnersDnis = append(winnersDnis, winnerDni)
+		pos += DniSize
+	}
+	return NewLotteryWinnersResponseMessage(status, winnersDnis)
 }
