@@ -20,9 +20,10 @@ const (
 )
 
 const (
-	MessageTypeBets                = 1
-	MessageTypeBetsConfirmation    = 2
-	MessageTypeFinishedSendingBets = 3
+	MessageTypeBets                  = 1
+	MessageTypeBetsConfirmation      = 2
+	MessageTypeFinishedSendingBets   = 3
+	MessageTypeLotteryWinnersRequest = 4
 )
 
 const (
@@ -148,6 +149,33 @@ func SerializeFinishedSendingBetsMessage(finishedSendingBetsMessage FinishedSend
 	pos += MessageTypeSize
 
 	binary.BigEndian.PutUint32(buffer[pos:pos+IdAgenciaSize], finishedSendingBetsMessage.IdAgencia)
+
+	return buffer
+}
+
+type LotteryWinnersRequestMessage struct {
+	IdAgencia uint32
+}
+
+func NewLotteryWinnersRequestMessage(idAgencia uint32) LotteryWinnersRequestMessage {
+	return LotteryWinnersRequestMessage{
+		IdAgencia: idAgencia,
+	}
+}
+
+func SerializeLotteryWinnersRequestMessage(LotteryWinnersRequestMessage LotteryWinnersRequestMessage) []byte {
+	messageSize := IdAgenciaSize
+
+	buffer := make([]byte, HeaderSize+messageSize)
+	pos := 0
+
+	binary.BigEndian.PutUint16(buffer[pos:pos+LenMessageSize], uint16(messageSize))
+	pos += LenMessageSize
+
+	buffer[pos] = MessageTypeLotteryWinnersRequest
+	pos += MessageTypeSize
+
+	binary.BigEndian.PutUint32(buffer[pos:pos+IdAgenciaSize], LotteryWinnersRequestMessage.IdAgencia)
 
 	return buffer
 }

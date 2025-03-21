@@ -220,6 +220,8 @@ func (c *Client) StartClientLoop() {
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 
 	c.notifyFinishedSendingBets()
+
+	c.sendLotteryWinnersRequest()
 }
 
 func (c *Client) notifyFinishedSendingBets() {
@@ -248,4 +250,30 @@ func (c *Client) notifyFinishedSendingBets() {
 	}
 
 	log.Infof("action: notificar_fin_apuestas | result: success | client_id: %v", c.config.ID)
+}
+
+func (c *Client) sendLotteryWinnersRequest() {
+	err := c.createClientSocket()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if c.conn != nil {
+			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
+			c.conn.Close()
+			log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
+			c.conn = nil
+		}
+	}()
+
+	log.Infof("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
+
+	lotteryWinnersRequestMessage := communication.NewLotteryWinnersRequestMessage(c.config.ID)
+	lotteryWinnersRequestMessageBytes := communication.SerializeLotteryWinnersRequestMessage(lotteryWinnersRequestMessage)
+
+	err = communication.SendPacket(c.conn, lotteryWinnersRequestMessageBytes)
+	if err != nil {
+		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
 }

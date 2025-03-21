@@ -91,6 +91,8 @@ class Server:
             self.__handle_bets(message, client_sock)
         elif isinstance(message, protocol.FinishedSendingBetsMessage):
             self.__handle_finished_sending_bets(message)
+        elif isinstance(message, protocol.LotteryWinnersRequestMessage):
+            self.__handle_lottery_winners_request(message)
         
         client_sock.close()
 
@@ -145,4 +147,7 @@ class Server:
             self._lottery_done = True
             logging.info("action: sorteo | result: success")
         except OSError as e:
-            logging.error(f"action: sorteo | result: fail | error: {e}")       
+            logging.error(f"action: sorteo | result: fail | error: {e}")
+    
+    def __handle_lottery_winners_request(self, lottery_winners_request_message):
+        logging.info(f"action: lottery_winners_requested | agency_id: {lottery_winners_request_message.id_agencia}")

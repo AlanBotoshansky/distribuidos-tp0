@@ -18,8 +18,13 @@ class MessageType(IntEnum):
     BETS = 1
     BETS_CONFIRMATION = 2
     FINISHED_SENDING_BETS = 3
+    LOTTERY_WINNERS_REQUEST = 4
     
 class FinishedSendingBetsMessage:
+    def __init__(self, id_agencia):
+        self.id_agencia = id_agencia
+        
+class LotteryWinnersRequestMessage:
     def __init__(self, id_agencia):
         self.id_agencia = id_agencia
 
@@ -50,6 +55,8 @@ def deserialize_packet(packet):
         return deserialize_bets(packet[HEADER_SIZE:])
     elif message_type == MessageType.FINISHED_SENDING_BETS:
         return deserialize_finished_sending_bets(packet[HEADER_SIZE:])
+    elif message_type == MessageType.LOTTERY_WINNERS_REQUEST:
+        return deserialize_lottery_winners_request(packet[HEADER_SIZE:])
     else:
         raise ValueError("Invalid message type")
     
@@ -96,6 +103,10 @@ def deserialize_bets(bets_message_bytes):
 def deserialize_finished_sending_bets(finished_sending_bets_message_bytes):
     id_agencia = int.from_bytes(finished_sending_bets_message_bytes, byteorder="big")
     return FinishedSendingBetsMessage(id_agencia)
+
+def deserialize_lottery_winners_request(lottery_winners_request_message_bytes):
+    id_agencia = int.from_bytes(lottery_winners_request_message_bytes, byteorder="big")
+    return LotteryWinnersRequestMessage(id_agencia)
 
 class BetsConfirmationResult(IntEnum):
     OK = 0
