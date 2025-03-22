@@ -5,15 +5,15 @@ import communication.protocol as protocol
 import common.utils as utils
 
 SOCKET_TIMEOUT = 1
-TOTAL_AGENCIES = 5
 
 class Server:
-    def __init__(self, port, listen_backlog):
+    def __init__(self, port, listen_backlog, total_agencies):
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._shutdown_requested = False
+        self._total_agencies = total_agencies
         self._finished_agencies = set()
         self._winning_bets_by_agency = {}
         self._lottery_done = False
@@ -134,7 +134,7 @@ class Server:
         agency_id = finished_sending_bets_message.id_agencia
         logging.info(f'action: total_apuestas_recibidas | result: success | id_agencia: {agency_id}')
         self._finished_agencies.add(agency_id)
-        if len(self._finished_agencies) == TOTAL_AGENCIES:
+        if len(self._finished_agencies) == self._total_agencies:
             self._do_lottery()
             
     def _do_lottery(self):
