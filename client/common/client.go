@@ -146,12 +146,12 @@ func (c *Client) StartClientLoop() {
 		betConfirmation, ok := msg.(communication.BetConfirmationMessage)
 		if ok {
 			log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", dni, numero)
-		}
 
-		if betConfirmation.Result == communication.BetConfirmationResultOk {
-			log.Infof("action: apuesta_almacenada | result: success | dni: %v | numero: %v", dni, numero)
-		} else {
-			log.Infof("action: apuesta_almacenada | result: fail | dni: %v | numero: %v", dni, numero)
+			if betConfirmation.Result == communication.BetConfirmationResultOk {
+				log.Infof("action: apuesta_almacenada | result: success | dni: %v | numero: %v", dni, numero)
+			} else {
+				log.Infof("action: apuesta_almacenada | result: fail | dni: %v | numero: %v", dni, numero)
+			}
 		}
 
 		// Wait a time between sending one message and the next one
