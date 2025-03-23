@@ -18,11 +18,6 @@ services:
     entrypoint: /client
     environment:
       - CLI_ID=1
-      - NOMBRE=Cliente1
-      - APELLIDO=Apellido1
-      - DOCUMENTO=30000001
-      - NACIMIENTO=1990-02-02
-      - NUMERO=1001
     volumes:
       - ./client/config.yaml:/config.yaml
       - ./.data/agency-1.csv:/.data/agency-1.csv
@@ -37,11 +32,6 @@ services:
     entrypoint: /client
     environment:
       - CLI_ID=2
-      - NOMBRE=Cliente2
-      - APELLIDO=Apellido2
-      - DOCUMENTO=30000002
-      - NACIMIENTO=1990-03-03
-      - NUMERO=1002
     volumes:
       - ./client/config.yaml:/config.yaml
       - ./.data/agency-2.csv:/.data/agency-2.csv
@@ -56,11 +46,6 @@ services:
     entrypoint: /client
     environment:
       - CLI_ID=3
-      - NOMBRE=Cliente3
-      - APELLIDO=Apellido3
-      - DOCUMENTO=30000003
-      - NACIMIENTO=1990-04-04
-      - NUMERO=1003
     volumes:
       - ./client/config.yaml:/config.yaml
       - ./.data/agency-3.csv:/.data/agency-3.csv
@@ -75,11 +60,6 @@ services:
     entrypoint: /client
     environment:
       - CLI_ID=4
-      - NOMBRE=Cliente4
-      - APELLIDO=Apellido4
-      - DOCUMENTO=30000004
-      - NACIMIENTO=1990-05-05
-      - NUMERO=1004
     volumes:
       - ./client/config.yaml:/config.yaml
       - ./.data/agency-4.csv:/.data/agency-4.csv
@@ -94,11 +74,6 @@ services:
     entrypoint: /client
     environment:
       - CLI_ID=5
-      - NOMBRE=Cliente5
-      - APELLIDO=Apellido5
-      - DOCUMENTO=30000005
-      - NACIMIENTO=1990-06-06
-      - NUMERO=1005
     volumes:
       - ./client/config.yaml:/config.yaml
       - ./.data/agency-5.csv:/.data/agency-5.csv

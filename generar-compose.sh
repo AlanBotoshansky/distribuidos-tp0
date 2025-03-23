@@ -37,11 +37,6 @@ for ((i=1; i<=$NUM_CLIENTS; i++)); do
     entrypoint: /client
     environment:
       - CLI_ID=$i
-      - NOMBRE=Cliente${i}
-      - APELLIDO=Apellido${i}
-      - DOCUMENTO=${DNI}
-      - NACIMIENTO=1990-${MONTH}-${DAY}
-      - NUMERO=$(( 1000 + i ))
     volumes:
       - ./client/config.yaml:/config.yaml
       - ./.data/agency-$i.csv:/.data/agency-$i.csv
