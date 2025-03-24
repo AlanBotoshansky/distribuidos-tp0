@@ -1,10 +1,12 @@
 import socket
 import logging
 import signal
+import multiprocessing as mp
 import communication.protocol as protocol
 import common.utils as utils
 
 SOCKET_TIMEOUT = 1
+JOIN_PROCESS_TIMEOUT = 1
 
 class Server:
     def __init__(self, port, listen_backlog, total_agencies):
@@ -12,11 +14,9 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
-        self._shutdown_requested = False
+        self._shutdown_requested = None
         self._total_agencies = total_agencies
-        self._finished_agencies = set()
-        self._winning_bets_by_agency = {}
-        self._lottery_done = False
+        self._processes = []
         
         signal.signal(signal.SIGTERM, self.__handle_signal)
         logging.info('action: setup_signal | result: success | signal: SIGTERM')
@@ -27,32 +27,38 @@ class Server:
         """
         if signalnum == signal.SIGTERM:
             logging.info('action: signal_received | result: success | signal: SIGTERM')
-            self._shutdown_requested = True
+            if self._shutdown_requested is not None:
+                self._shutdown_requested.set()
             
     def run(self):
         """
-        Dummy Server loop
-
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again.
+        Multi-process server loop
+        
+        Server that accepts connections and handles each in a separate process.
         The loop will continue until a SIGTERM signal is received.
         """
-        try:
-            self._server_socket.settimeout(SOCKET_TIMEOUT)
-            while not self._shutdown_requested:
-                try:
-                    client_sock = self.__accept_new_connection()
-                    self.__handle_client_connection(client_sock)
-                except socket.timeout:
-                    continue
-                except OSError as e:
-                    if self._shutdown_requested:
-                        break
-                    logging.error(f"action: accept_connection | result: fail | error: {e}")
-        finally:
-            self.__cleanup()
-            
+        with mp.Manager() as manager:
+            self._shutdown_requested = manager.Event()
+            finished_agencies = manager.dict()
+            winning_bets_by_agency = manager.dict()
+            lottery_done = mp.Value('b', False)
+            file_lock = manager.Lock()
+            try:
+                self._server_socket.settimeout(SOCKET_TIMEOUT)
+                while not self._shutdown_requested.is_set():
+                    try:
+                        client_sock = self.__accept_new_connection()
+                        process = mp.Process(target=handle_client_connection, args=(self._shutdown_requested, self._total_agencies, client_sock, finished_agencies, winning_bets_by_agency, lottery_done, file_lock), daemon=True)
+                        process.start()
+                        self._processes.append(process)
+                        self._processes = [p for p in self._processes if p.is_alive()]
+                    except socket.timeout:
+                        continue
+                    except OSError as e:
+                        logging.error(f"action: accept_connection | result: fail | error: {e}")
+            finally:
+                self.__cleanup()
+                
     def __cleanup(self):
         """
         Cleanup server resources during shutdown
@@ -65,36 +71,11 @@ class Server:
             logging.info('action: close_server_socket | result: success')
         except OSError as e:
             logging.error(f"action: close_server_socket | result: fail | error: {e}")
+            
+        for p in self._processes:
+            p.join(timeout=JOIN_PROCESS_TIMEOUT)
                 
         logging.info('action: shutting_down | result: success')
-
-    def __handle_client_connection(self, client_sock):
-        """
-        Read message from a specific client socket and closes the socket
-
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
-        """
-        try:            
-            packet = protocol.receive_packet(client_sock)
-            message = protocol.deserialize_packet(packet)
-        except (OSError, ConnectionError) as e:
-            logging.error(f"action: receive_message | result: fail | error: {e}")
-            client_sock.close()
-            return
-        except ValueError as e:
-            logging.error(f"action: deserialize_packet | result: fail | error: {e}")
-            client_sock.close()
-            return
-        
-        if isinstance(message, list) and all(isinstance(bet, utils.Bet) for bet in message):
-            self.__handle_bets(message, client_sock)
-        elif isinstance(message, protocol.FinishedSendingBetsMessage):
-            self.__handle_finished_sending_bets(message)
-        elif isinstance(message, protocol.LotteryWinnersRequestMessage):
-            self.__handle_lottery_winners_request(message, client_sock)
-        
-        client_sock.close()
 
     def __accept_new_connection(self):
         """
@@ -110,53 +91,102 @@ class Server:
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
-    def __handle_bets(self, bets, client_sock):
-        """
-        Handle bets received from a client
+def safe_store_bets(bets, file_lock):
+    """
+    Process-safe wrapper for store_bets
+    """
+    with file_lock:
+        utils.store_bets(bets)
+        
+def safe_load_bets(file_lock):
+    """
+    Process-safe wrapper for load_bets
+    """
+    with file_lock:
+        return list(utils.load_bets())
 
-        Function that receives a list of bets and stores them in a file
-        """
+def handle_client_connection(shutdown_requested, total_agencies, client_sock, finished_agencies, winning_bets_by_agency, lottery_done, file_lock):
+    """
+    Worker function to handle a client connection in a separate process
+    """
+    while not shutdown_requested.is_set():
         try:
-            utils.store_bets(bets)
-            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
-            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.OK))
-        except OSError as e:
-            logging.info(f'action: apuesta_recibida | result: fail | cantidad: {len(bets)}')
-            protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.ERROR))
+            packet = protocol.receive_packet(client_sock)
+            message = protocol.deserialize_packet(packet)
+        except (OSError, ConnectionError) as e:
+            logging.error(f"action: receive_message | result: fail | error: {e}")
+            break
+        except ValueError as e:
+            logging.error(f"action: deserialize_packet | result: fail | error: {e}")
+            break
+        
+        if isinstance(message, list) and all(isinstance(bet, utils.Bet) for bet in message):
+            handle_bets(message, client_sock, file_lock)
+        elif isinstance(message, protocol.FinishedSendingBetsMessage):
+            handle_finished_sending_bets(message, finished_agencies, winning_bets_by_agency, lottery_done, file_lock, total_agencies)
+        elif isinstance(message, protocol.LotteryWinnersRequestMessage):
+            if handle_lottery_winners_request(message, client_sock, winning_bets_by_agency, lottery_done):
+                break
 
-    def __handle_finished_sending_bets(self, finished_sending_bets_message):
-        """
-        Handle finished sending bets message
+    client_sock.close()
+    logging.info('action: close_client_connection | result: success')
 
-        Function that receives a message from a client indicating that
-        all bets have been sent
-        """
-        agency_id = finished_sending_bets_message.id_agencia
-        logging.info(f'action: total_apuestas_recibidas | result: success | id_agencia: {agency_id}')
-        self._finished_agencies.add(agency_id)
-        if len(self._finished_agencies) == self._total_agencies:
-            self._do_lottery()
-            
-    def _do_lottery(self):
-        try:
-            for bet in utils.load_bets():
-                if utils.has_won(bet):
-                    winning_bets = self._winning_bets_by_agency.get(bet.agency, [])
-                    winning_bets.append(bet)
-                    self._winning_bets_by_agency[bet.agency] = winning_bets
-            self._lottery_done = True
-            logging.info("action: sorteo | result: success")
-        except OSError as e:
-            logging.error(f"action: sorteo | result: fail | error: {e}")
+def handle_bets(bets, client_sock, file_lock):
+    """
+    Handle bets received from a client
+
+    Function that receives a list of bets and stores them in a file
+    """
+    try:
+        safe_store_bets(bets, file_lock)
+        logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
+        protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.OK))
+    except OSError as e:
+        logging.info(f'action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}')
+        protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.ERROR))
+
+def handle_finished_sending_bets(finished_sending_bets_message, finished_agencies, winning_bets_by_agency, lottery_done, file_lock, total_agencies):
+    """
+    Handle finished sending bets message with multiprocessing synchronization
+    """
+    agency_id = finished_sending_bets_message.id_agencia
+    logging.info(f'action: total_apuestas_recibidas | result: success | id_agencia: {agency_id}')
+    finished_agencies[agency_id] = None
+    if len(finished_agencies) == total_agencies:
+        do_lottery(winning_bets_by_agency, lottery_done, file_lock)
+
+def do_lottery(winning_bets_by_agency, lottery_done, file_lock):
+    """
+    Do the lottery with multiprocessing synchronization
+    """
+    try:
+        for bet in safe_load_bets(file_lock):
+            if utils.has_won(bet):
+                winning_bets = winning_bets_by_agency.get(bet.agency, [])
+                winning_bets.append(bet)
+                winning_bets_by_agency[bet.agency] = winning_bets
+        with lottery_done.get_lock():
+            lottery_done.value = True
+        logging.info("action: sorteo | result: success")
+    except OSError as e:
+        logging.error(f"action: sorteo | result: fail | error: {e}")
+
+def handle_lottery_winners_request(lottery_winners_request_message, client_sock, winning_bets_by_agency, lottery_done):
+    """
+    Handle lottery winners request with multiprocessing synchronization
     
-    def __handle_lottery_winners_request(self, lottery_winners_request_message, client_sock):
-        agency_id = lottery_winners_request_message.id_agencia
-        logging.info(f"action: lottery_winners_requested | result: success | agency_id: {agency_id}")
-        if not self._lottery_done:
-            protocol.send_message(client_sock, protocol.LotteryWinnersResponseMessage(protocol.LotteryWinnersResponseStatus.NOT_READY))
-            return
-        winning_bets = self._winning_bets_by_agency.get(agency_id, [])
-        winners_dnis = [bet.document for bet in winning_bets]
-        lottery_winners_response_message = protocol.LotteryWinnersResponseMessage(protocol.LotteryWinnersResponseStatus.READY, winners_dnis)
-        protocol.send_message(client_sock, lottery_winners_response_message)
-        logging.info(f"action: lottery_winners_sent | result: success | agency_id: {agency_id} | n_winners: {len(winners_dnis)}")
+    Returns True if the winners were sent, False otherwise
+    """
+    agency_id = lottery_winners_request_message.id_agencia
+    logging.info(f"action: lottery_winners_requested | result: success | agency_id: {agency_id}")
+    with lottery_done.get_lock():
+        is_lottery_done = lottery_done.value
+    if not is_lottery_done:
+        protocol.send_message(client_sock, protocol.LotteryWinnersResponseMessage(protocol.LotteryWinnersResponseStatus.NOT_READY))
+        return False
+    winning_bets = winning_bets_by_agency.get(agency_id, [])
+    winners_dnis = [bet.document for bet in winning_bets]
+    lottery_winners_response_message = protocol.LotteryWinnersResponseMessage(protocol.LotteryWinnersResponseStatus.READY, winners_dnis)
+    protocol.send_message(client_sock, lottery_winners_response_message)
+    logging.info(f"action: lottery_winners_sent | result: success | agency_id: {agency_id} | n_winners: {len(winners_dnis)}")
+    return True

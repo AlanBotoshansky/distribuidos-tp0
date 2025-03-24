@@ -16,7 +16,7 @@ import (
 
 const RecordsToCheckShutdown = 500
 
-const MillisecondsBetweenLotteryWinnersRequests = 5000
+const MillisecondsBetweenLotteryWinnersRequests = 1000
 
 var log = logging.MustGetLogger("log")
 
@@ -145,13 +145,21 @@ func (c *Client) StartClientLoop() {
 	default:
 	}
 
+	err = c.createClientSocket()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if c.conn != nil {
+			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
+			c.conn.Close()
+			log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
+			c.conn = nil
+		}
+	}()
+
 	betsSent := 0
 	for betsSent < len(bets) {
-		err := c.createClientSocket()
-		if err != nil {
-			return
-		}
-
 		log.Infof("action: apuesta_enviada | result: in_progress | client_id: %v", c.config.ID)
 		batchBets := bets[betsSent:min(betsSent+c.config.BatchMaxAmount, len(bets))]
 		bets := communication.NewBets(c.config.ID, batchBets)
@@ -168,13 +176,6 @@ func (c *Client) StartClientLoop() {
 		betsSent += len(batchBets)
 
 		packet, err := communication.ReceivePacket(c.conn)
-
-		if c.conn != nil {
-			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
-			c.conn.Close()
-			log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
-			c.conn = nil
-		}
 
 		if err != nil {
 			log.Errorf("action: receive_packet | result: fail | client_id: %v | error: %v",
@@ -227,25 +228,17 @@ func (c *Client) StartClientLoop() {
 }
 
 func (c *Client) notifyFinishedSendingBets() {
-	err := c.createClientSocket()
-	if err != nil {
+	if c.conn == nil {
+		log.Errorf("action: notificar_fin_apuestas | result: fail | client_id: %v | error: connection is nil", c.config.ID)
 		return
 	}
-	defer func() {
-		if c.conn != nil {
-			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
-			c.conn.Close()
-			log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
-			c.conn = nil
-		}
-	}()
 
 	log.Infof("action: notificar_fin_apuestas | result: in_progress | client_id: %v", c.config.ID)
 
 	finishedSendingBetsMessage := communication.NewFinishedSendingBetsMessage(c.config.ID)
 	finishedSendingBetsMessageBytes := communication.SerializeFinishedSendingBetsMessage(finishedSendingBetsMessage)
 
-	err = communication.SendPacket(c.conn, finishedSendingBetsMessageBytes)
+	err := communication.SendPacket(c.conn, finishedSendingBetsMessageBytes)
 	if err != nil {
 		log.Errorf("action: notificar_fin_apuestas | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		return
@@ -255,39 +248,24 @@ func (c *Client) notifyFinishedSendingBets() {
 }
 
 func (c *Client) getLotteryWinners() {
-	for {
-		err := c.createClientSocket()
-		if err != nil {
-			return
-		}
-		defer func() {
-			if c.conn != nil {
-				log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
-				c.conn.Close()
-				log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
-				c.conn = nil
-			}
-		}()
+	if c.conn == nil {
+		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: connection is nil", c.config.ID)
+		return
+	}
 
+	for {
 		log.Infof("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
 
 		lotteryWinnersRequestMessage := communication.NewLotteryWinnersRequestMessage(c.config.ID)
 		lotteryWinnersRequestMessageBytes := communication.SerializeLotteryWinnersRequestMessage(lotteryWinnersRequestMessage)
 
-		err = communication.SendPacket(c.conn, lotteryWinnersRequestMessageBytes)
+		err := communication.SendPacket(c.conn, lotteryWinnersRequestMessageBytes)
 		if err != nil {
 			log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			return
 		}
 
 		packet, err := communication.ReceivePacket(c.conn)
-
-		if c.conn != nil {
-			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
-			c.conn.Close()
-			log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
-			c.conn = nil
-		}
 
 		if err != nil {
 			log.Errorf("action: receive_packet | result: fail | client_id: %v | error: %v",
