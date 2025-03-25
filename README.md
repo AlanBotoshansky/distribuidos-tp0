@@ -492,3 +492,54 @@ client2 | action: notificar_fin_apuestas | result: success | client_id: 2
 server  | action: sorteo | result: success
 client1 | action: consulta_ganadores | result: success | cant_ganadores: 2
 ```
+
+### Ejercicio N°8:
+
+#### Solución implementada
+Se modificó el servidor para permitir la aceptación de conexiones y el procesamiento de mensajes en paralelo utilizando multiprocessing. Los cambios implementados incluyen:
+
+1. Arquitectura multiproceso para el servidor:
+   - Cada conexión de cliente se maneja en un proceso por separado
+   - El servidor acepta conexiones y crea procesos hijos para atenderlas
+   - Los procesos finalizan naturalmente cuando la conexión se cierra
+   - El servidor lleva un registro de procesos activos y limpia los procesos terminados
+
+2. Implementación de mecanismos de sincronización para compartir estado:
+   - Uso de `mp.Manager()` para crear estructuras de datos compartidas entre procesos
+   - `manager.dict()` para el seguimiento de agencias que han finalizado (`finished_agencies`)
+   - `manager.dict()` para almacenar apuestas ganadoras por agencia (`winning_bets_by_agency`)
+   - `manager.Event()` para señalizar cuando el sorteo se ha realizado (`lottery_done`)
+   - `manager.Lock()` para garantizar acceso exclusivo al archivo de apuestas (`file_lock`)
+
+3. Funciones seguras para multiprocessing:
+   - `safe_store_bets()` que utiliza dicho lock para acceso exclusivo al almacenar apuestas con `store_bets()`
+   - `safe_load_bets()` que utiliza dicho lock para acceso exclusivo al leer las apuestas del archivo con `load_bets()`
+   - Estas funciones evitan condiciones de carrera al leer/escribir los datos de apuestas
+
+4. Control de ciclo de vida de procesos:
+   - Gestión de procesos hijos mediante `process.start()` y `process.join()`
+   - Limpieza periódica de procesos finalizados
+   - Terminación adecuada durante el apagado del servidor (se coordina la finalización de los procesos con el flag `_shutdown_requested`)
+
+La decisión de utilizar multiprocessing en lugar de multithreading se debe a las limitaciones del GIL (Global Interpreter Lock) que impide la verdadera ejecución en paralelo de threads Python. Al utilizar procesos separados, cada uno con su propio intérprete, se logra verdadero paralelismo en la ejecución.
+
+##### Modificación del protocolo:
+- Ahora los clientes consultan una única vez por los ganadores, y el servidor les responde con los dnis de los ganadores una vez se realizó el sorteo.
+- El mensaje `LOTTERY_WINNERS_RESPONSE` ya no tiene un campo "Estado", ya que el servidor envía la respuesta solo cuando el sorteo fue realizado.
+
+#### Cómo ejecutar
+
+1. Generar el archivo docker-compose con 5 clientes:
+```bash
+./generar-compose.sh docker-compose-dev.yaml 5
+```
+
+2. Iniciar los contenedores:
+```bash
+make docker-compose-up
+```
+
+3. Verificar en los logs que múltiples conexiones son manejadas simultáneamente:
+```bash
+make docker-compose-logs
+```
