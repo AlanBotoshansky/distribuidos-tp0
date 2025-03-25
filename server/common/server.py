@@ -7,6 +7,7 @@ import common.utils as utils
 
 SOCKET_TIMEOUT = 1
 JOIN_PROCESS_TIMEOUT = 1
+LOTTERY_DONE_TIMEOUT = 0.5
 
 class Server:
     def __init__(self, port, listen_backlog, total_agencies):
@@ -123,9 +124,9 @@ def handle_client_connection(shutdown_requested, total_agencies, client_sock, fi
         if isinstance(message, list) and all(isinstance(bet, utils.Bet) for bet in message):
             handle_bets(message, client_sock, file_lock)
         elif isinstance(message, protocol.FinishedSendingBetsMessage):
-            handle_finished_sending_bets(message, finished_agencies, winning_bets_by_agency, lottery_done, file_lock, total_agencies)
+            handle_finished_sending_bets(message, total_agencies, finished_agencies, winning_bets_by_agency, lottery_done, file_lock)
         elif isinstance(message, protocol.LotteryWinnersRequestMessage):
-            handle_lottery_winners_request(message, client_sock, winning_bets_by_agency, lottery_done)
+            handle_lottery_winners_request(message, shutdown_requested, client_sock, winning_bets_by_agency, lottery_done)
             break
 
     client_sock.close()
@@ -145,7 +146,7 @@ def handle_bets(bets, client_sock, file_lock):
         logging.info(f'action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}')
         protocol.send_message(client_sock, protocol.BetsConfirmationMessage(protocol.BetsConfirmationResult.ERROR))
 
-def handle_finished_sending_bets(finished_sending_bets_message, finished_agencies, winning_bets_by_agency, lottery_done, file_lock, total_agencies):
+def handle_finished_sending_bets(finished_sending_bets_message, total_agencies, finished_agencies, winning_bets_by_agency, lottery_done, file_lock):
     """
     Handle finished sending bets message with multiprocessing synchronization
     """
@@ -170,13 +171,18 @@ def do_lottery(winning_bets_by_agency, lottery_done, file_lock):
     except OSError as e:
         logging.error(f"action: sorteo | result: fail | error: {e}")
 
-def handle_lottery_winners_request(lottery_winners_request_message, client_sock, winning_bets_by_agency, lottery_done):
+def handle_lottery_winners_request(lottery_winners_request_message, shutdown_requested, client_sock, winning_bets_by_agency, lottery_done):
     """
     Handle lottery winners request with multiprocessing synchronization
     """
     agency_id = lottery_winners_request_message.id_agencia
     logging.info(f"action: lottery_winners_requested | result: success | agency_id: {agency_id}")
-    lottery_done.wait()
+    while not lottery_done.is_set():
+        if lottery_done.wait(timeout=LOTTERY_DONE_TIMEOUT) or shutdown_requested.is_set():
+            break
+    if shutdown_requested.is_set():
+        logging.info(f"action: lottery_winners_cancelled | result: success | agency_id: {agency_id}")
+        return
     winning_bets = winning_bets_by_agency.get(agency_id, [])
     winners_dnis = [bet.document for bet in winning_bets]
     lottery_winners_response_message = protocol.LotteryWinnersResponseMessage(winners_dnis)
