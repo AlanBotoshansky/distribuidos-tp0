@@ -41,7 +41,7 @@ class Server:
             self._shutdown_requested = manager.Event()
             finished_agencies = manager.dict()
             winning_bets_by_agency = manager.dict()
-            lottery_done = mp.Value('b', False)
+            lottery_done = manager.Event()
             file_lock = manager.Lock()
             try:
                 self._server_socket.settimeout(SOCKET_TIMEOUT)
@@ -125,8 +125,8 @@ def handle_client_connection(shutdown_requested, total_agencies, client_sock, fi
         elif isinstance(message, protocol.FinishedSendingBetsMessage):
             handle_finished_sending_bets(message, finished_agencies, winning_bets_by_agency, lottery_done, file_lock, total_agencies)
         elif isinstance(message, protocol.LotteryWinnersRequestMessage):
-            if handle_lottery_winners_request(message, client_sock, winning_bets_by_agency, lottery_done):
-                break
+            handle_lottery_winners_request(message, client_sock, winning_bets_by_agency, lottery_done)
+            break
 
     client_sock.close()
     logging.info('action: close_client_connection | result: success')
@@ -165,8 +165,7 @@ def do_lottery(winning_bets_by_agency, lottery_done, file_lock):
                 winning_bets = winning_bets_by_agency.get(bet.agency, [])
                 winning_bets.append(bet)
                 winning_bets_by_agency[bet.agency] = winning_bets
-        with lottery_done.get_lock():
-            lottery_done.value = True
+        lottery_done.set()
         logging.info("action: sorteo | result: success")
     except OSError as e:
         logging.error(f"action: sorteo | result: fail | error: {e}")
@@ -174,19 +173,12 @@ def do_lottery(winning_bets_by_agency, lottery_done, file_lock):
 def handle_lottery_winners_request(lottery_winners_request_message, client_sock, winning_bets_by_agency, lottery_done):
     """
     Handle lottery winners request with multiprocessing synchronization
-    
-    Returns True if the winners were sent, False otherwise
     """
     agency_id = lottery_winners_request_message.id_agencia
     logging.info(f"action: lottery_winners_requested | result: success | agency_id: {agency_id}")
-    with lottery_done.get_lock():
-        is_lottery_done = lottery_done.value
-    if not is_lottery_done:
-        protocol.send_message(client_sock, protocol.LotteryWinnersResponseMessage(protocol.LotteryWinnersResponseStatus.NOT_READY))
-        return False
+    lottery_done.wait()
     winning_bets = winning_bets_by_agency.get(agency_id, [])
     winners_dnis = [bet.document for bet in winning_bets]
-    lottery_winners_response_message = protocol.LotteryWinnersResponseMessage(protocol.LotteryWinnersResponseStatus.READY, winners_dnis)
+    lottery_winners_response_message = protocol.LotteryWinnersResponseMessage(winners_dnis)
     protocol.send_message(client_sock, lottery_winners_response_message)
     logging.info(f"action: lottery_winners_sent | result: success | agency_id: {agency_id} | n_winners: {len(winners_dnis)}")
-    return True

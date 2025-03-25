@@ -34,13 +34,6 @@ const (
 	BetsConfirmationResultError = 1
 )
 
-const LotteryWinnersResponseStatusSize = 1
-
-const (
-	LotteryWinnersResponseStatusReady    = 0
-	LotteryWinnersResponseStatusNotReady = 1
-)
-
 type Bet struct {
 	Nombre     string
 	Apellido   string
@@ -213,13 +206,11 @@ func NewBetsConfirmationMessage(result uint8) BetsConfirmationMessage {
 }
 
 type LotteryWinnersResponseMessage struct {
-	Status      uint8
 	WinnersDnis []string
 }
 
-func NewLotteryWinnersResponseMessage(status uint8, winnersDnis []string) LotteryWinnersResponseMessage {
+func NewLotteryWinnersResponseMessage(winnersDnis []string) LotteryWinnersResponseMessage {
 	return LotteryWinnersResponseMessage{
-		Status:      status,
 		WinnersDnis: winnersDnis,
 	}
 }
@@ -276,16 +267,12 @@ func DeserializeBetsConfirmation(packet []byte) BetsConfirmationMessage {
 }
 
 func DeserializeLotteryWinnersResponse(packet []byte) LotteryWinnersResponseMessage {
-	status := packet[HeaderSize]
-	if status == LotteryWinnersResponseStatusNotReady {
-		return NewLotteryWinnersResponseMessage(status, nil)
-	}
 	winnersDnis := make([]string, 0)
-	pos := HeaderSize + LotteryWinnersResponseStatusSize
+	pos := HeaderSize
 	for pos < len(packet) {
 		winnerDni := string(packet[pos : pos+DniSize])
 		winnersDnis = append(winnersDnis, winnerDni)
 		pos += DniSize
 	}
-	return NewLotteryWinnersResponseMessage(status, winnersDnis)
+	return NewLotteryWinnersResponseMessage(winnersDnis)
 }

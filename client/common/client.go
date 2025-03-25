@@ -16,8 +16,6 @@ import (
 
 const RecordsToCheckShutdown = 500
 
-const MillisecondsBetweenLotteryWinnersRequests = 1000
-
 var log = logging.MustGetLogger("log")
 
 // ClientConfig Configuration used by the client
@@ -253,54 +251,45 @@ func (c *Client) getLotteryWinners() {
 		return
 	}
 
-	for {
-		log.Infof("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
+	log.Infof("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
 
-		lotteryWinnersRequestMessage := communication.NewLotteryWinnersRequestMessage(c.config.ID)
-		lotteryWinnersRequestMessageBytes := communication.SerializeLotteryWinnersRequestMessage(lotteryWinnersRequestMessage)
+	lotteryWinnersRequestMessage := communication.NewLotteryWinnersRequestMessage(c.config.ID)
+	lotteryWinnersRequestMessageBytes := communication.SerializeLotteryWinnersRequestMessage(lotteryWinnersRequestMessage)
 
-		err := communication.SendPacket(c.conn, lotteryWinnersRequestMessageBytes)
-		if err != nil {
-			log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
-		}
+	err := communication.SendPacket(c.conn, lotteryWinnersRequestMessageBytes)
+	if err != nil {
+		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
 
-		packet, err := communication.ReceivePacket(c.conn)
+	packet, err := communication.ReceivePacket(c.conn)
 
-		if err != nil {
-			log.Errorf("action: receive_packet | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
-
-		log.Infof("action: receive_packet | result: success | client_id: %v",
+	if err != nil {
+		log.Errorf("action: receive_packet | result: fail | client_id: %v | error: %v",
 			c.config.ID,
+			err,
 		)
+		return
+	}
 
-		msg, err := communication.DeserializePacket(packet)
+	log.Infof("action: receive_packet | result: success | client_id: %v",
+		c.config.ID,
+	)
 
-		if err != nil {
-			log.Errorf("action: deserialize_packet | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
+	msg, err := communication.DeserializePacket(packet)
 
-		lotteryWinnersResponseMessage, ok := msg.(communication.LotteryWinnersResponseMessage)
-		if ok && lotteryWinnersResponseMessage.Status == communication.LotteryWinnersResponseStatusReady {
-			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", len(lotteryWinnersResponseMessage.WinnersDnis))
-			break
-		}
+	if err != nil {
+		log.Errorf("action: deserialize_packet | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
 
-		select {
-		case <-time.After(time.Millisecond * MillisecondsBetweenLotteryWinnersRequests):
-			// Continue to next iteration
-		case <-c.shutdownChan:
-			log.Infof("action: consulta_ganadores_interrupted | result: success | client_id: %v", c.config.ID)
-			return
-		}
+	lotteryWinnersResponseMessage, ok := msg.(communication.LotteryWinnersResponseMessage)
+	if ok {
+		log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", len(lotteryWinnersResponseMessage.WinnersDnis))
+	} else {
+		log.Infof("action: consulta_ganadores | result: fail")
 	}
 }
