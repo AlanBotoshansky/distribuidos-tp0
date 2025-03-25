@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/op/go-logging"
@@ -27,11 +28,12 @@ type ClientConfig struct {
 	BatchMaxAmount int
 }
 
-// Client Entity that encapsulates how
+// Client Entity that represents a client
 type Client struct {
 	config       ClientConfig
 	conn         net.Conn
 	shutdownChan chan struct{}
+	connMutex    sync.Mutex
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -44,7 +46,7 @@ func NewClient(config ClientConfig) *Client {
 	return client
 }
 
-func (c *Client) ReadBetsFromCSV() ([]communication.Bet, error) {
+func (c *Client) readBetsFromCSV() ([]communication.Bet, error) {
 	filePath := fmt.Sprintf("../../.data/agency-%d.csv", c.config.ID)
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -98,9 +100,12 @@ func (c *Client) ReadBetsFromCSV() ([]communication.Bet, error) {
 }
 
 // CreateClientSocket Initializes client socket. In case of
-// failure, error is printed in stdout/stderr and exit 1
+// failure, error is printed in stdout/stderr and the error
 // is returned
 func (c *Client) createClientSocket() error {
+	c.connMutex.Lock()
+	defer c.connMutex.Unlock()
+
 	conn, err := net.Dial("tcp", c.config.ServerAddress)
 	if err != nil {
 		log.Criticalf(
@@ -114,10 +119,10 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-// Shutdown Close the connection and signal the client to stop sending messages
-func (c *Client) Shutdown() {
-	log.Infof("action: client_shutdown | result: in_progress | client_id: %v", c.config.ID)
-	close(c.shutdownChan)
+// closeConnection safely closes the connection
+func (c *Client) closeConnection() {
+	c.connMutex.Lock()
+	defer c.connMutex.Unlock()
 
 	if c.conn != nil {
 		log.Infof("action: close_connection | result: in_progress | client_id: %v", c.config.ID)
@@ -125,13 +130,21 @@ func (c *Client) Shutdown() {
 		log.Infof("action: close_connection | result: success | client_id: %v", c.config.ID)
 		c.conn = nil
 	}
+}
+
+// Shutdown Close the connection and signal the client to stop sending messages
+func (c *Client) Shutdown() {
+	log.Infof("action: client_shutdown | result: in_progress | client_id: %v", c.config.ID)
+	close(c.shutdownChan)
+
+	c.closeConnection()
 
 	log.Infof("action: client_shutdown | result: success | client_id: %v", c.config.ID)
 }
 
 // StartClientLoop Send batchs of bets to the server
 func (c *Client) StartClientLoop() {
-	bets, err := c.ReadBetsFromCSV()
+	bets, err := c.readBetsFromCSV()
 	if err != nil {
 		return
 	}
@@ -147,14 +160,7 @@ func (c *Client) StartClientLoop() {
 	if err != nil {
 		return
 	}
-	defer func() {
-		if c.conn != nil {
-			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
-			c.conn.Close()
-			log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
-			c.conn = nil
-		}
-	}()
+	defer c.closeConnection()
 
 	betsSent := 0
 	for betsSent < len(bets) {
