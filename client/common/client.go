@@ -23,17 +23,15 @@ type ClientConfig struct {
 
 // Client Entity that encapsulates how
 type Client struct {
-	config       ClientConfig
-	conn         net.Conn
-	shutdownChan chan struct{}
+	config ClientConfig
+	conn   net.Conn
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
-		config:       config,
-		shutdownChan: make(chan struct{}),
+		config: config,
 	}
 	return client
 }
@@ -74,7 +72,6 @@ func (c *Client) createClientSocket() error {
 // Shutdown Close the connection and signal the client to stop sending messages
 func (c *Client) Shutdown() {
 	log.Infof("action: client_shutdown | result: in_progress | client_id: %v", c.config.ID)
-	close(c.shutdownChan)
 
 	if c.conn != nil {
 		log.Infof("action: close_connection | result: in_progress | client_id: %v", c.config.ID)
@@ -86,83 +83,67 @@ func (c *Client) Shutdown() {
 	log.Infof("action: client_shutdown | result: success | client_id: %v", c.config.ID)
 }
 
-// StartClientLoop Send messages to the client until some time threshold is met
+// StartClientLoop Send a bet message to the server and wait for the response
+// If the response is successful, the message is logged
 func (c *Client) StartClientLoop() {
-	// There is an autoincremental msgID to identify every message sent
-	// Messages if the message amount threshold has not been surpassed
-	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
-		// Create the connection the server in every loop iteration. Send an
-		err := c.createClientSocket()
-		if err != nil {
-			return
-		}
+	err := c.createClientSocket()
+	if err != nil {
+		return
+	}
 
-		nombre, apellido, dni, nacimiento, numero := c.getBetInfo()
-		log.Infof("action: apuesta_enviada | result: in_progress | dni: %v | numero: %v", dni, numero)
-		betMessage := communication.NewBetMessage(c.config.ID, nombre, apellido, dni, nacimiento, uint32(numero))
-		betMessageBytes := communication.SerializeBet(betMessage)
-		err = communication.SendPacket(c.conn, betMessageBytes)
+	nombre, apellido, dni, nacimiento, numero := c.getBetInfo()
+	log.Infof("action: apuesta_enviada | result: in_progress | dni: %v | numero: %v", dni, numero)
+	betMessage := communication.NewBetMessage(c.config.ID, nombre, apellido, dni, nacimiento, uint32(numero))
+	betMessageBytes := communication.SerializeBet(betMessage)
+	err = communication.SendPacket(c.conn, betMessageBytes)
 
-		if err != nil {
-			log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
-
-		packet, err := communication.ReceivePacket(c.conn)
-
-		if c.conn != nil {
-			log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
-			c.conn.Close()
-			log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
-			c.conn = nil
-		}
-
-		if err != nil {
-			log.Errorf("action: receive_packet | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
-
-		log.Infof("action: receive_packet | result: success | client_id: %v | msg: %v",
+	if err != nil {
+		log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | error: %v",
 			c.config.ID,
-			packet,
+			err,
 		)
+		return
+	}
 
-		msg, err := communication.DeserializePacket(packet)
+	packet, err := communication.ReceivePacket(c.conn)
 
-		if err != nil {
-			log.Errorf("action: deserialize_packet | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
+	if c.conn != nil {
+		log.Infof("action: close_connection_after_use | result: in_progress | client_id: %v", c.config.ID)
+		c.conn.Close()
+		log.Infof("action: close_connection_after_use | result: success | client_id: %v", c.config.ID)
+		c.conn = nil
+	}
 
-		betConfirmation, ok := msg.(communication.BetConfirmationMessage)
-		if ok {
-			log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", dni, numero)
+	if err != nil {
+		log.Errorf("action: receive_packet | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
 
-			if betConfirmation.Result == communication.BetConfirmationResultOk {
-				log.Infof("action: apuesta_almacenada | result: success | dni: %v | numero: %v", dni, numero)
-			} else {
-				log.Infof("action: apuesta_almacenada | result: fail | dni: %v | numero: %v", dni, numero)
-			}
-		}
+	log.Infof("action: receive_packet | result: success | client_id: %v",
+		c.config.ID,
+	)
 
-		// Wait a time between sending one message and the next one
-		// Use select to either wait for the period or for shutdown signal
-		select {
-		case <-time.After(c.config.LoopPeriod):
-			// Continue to next iteration
-		case <-c.shutdownChan:
-			log.Infof("action: loop_interrupted | result: success | client_id: %v", c.config.ID)
-			return
+	msg, err := communication.DeserializePacket(packet)
+
+	if err != nil {
+		log.Errorf("action: deserialize_packet | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	betConfirmation, ok := msg.(communication.BetConfirmationMessage)
+	if ok {
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", dni, numero)
+
+		if betConfirmation.Result == communication.BetConfirmationResultOk {
+			log.Infof("action: apuesta_almacenada | result: success | dni: %v | numero: %v", dni, numero)
+		} else {
+			log.Infof("action: apuesta_almacenada | result: fail | dni: %v | numero: %v", dni, numero)
 		}
 	}
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
