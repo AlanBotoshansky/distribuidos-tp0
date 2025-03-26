@@ -208,16 +208,6 @@ func (c *Client) StartClientLoop() {
 		} else {
 			log.Infof("action: apuesta_almacenada | result: fail | client_id: %v", c.config.ID)
 		}
-
-		// Wait a time between sending one message and the next one
-		// Use select to either wait for the period or for shutdown signal
-		select {
-		case <-time.After(c.config.LoopPeriod):
-			// Continue to next iteration
-		case <-c.shutdownChan:
-			log.Infof("action: loop_interrupted | result: success | client_id: %v", c.config.ID)
-			return
-		}
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 
