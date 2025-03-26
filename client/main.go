@@ -15,6 +15,8 @@ import (
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
 )
 
+const ArtificialSleepMilliseconds = 1000
+
 var log = logging.MustGetLogger("log")
 
 // InitConfig Function that uses viper library to parse configuration parameters.
@@ -129,4 +131,6 @@ func main() {
 	SetUpSignalHandlerForGracefulShutdown(client)
 
 	client.StartClientLoop()
+
+	time.Sleep(ArtificialSleepMilliseconds * time.Millisecond)
 }
