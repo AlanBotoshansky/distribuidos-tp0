@@ -4,8 +4,6 @@ import signal
 import communication.protocol as protocol
 import common.utils as utils
 
-SOCKET_TIMEOUT = 1
-
 class Server:
     def __init__(self, port, listen_backlog):
         # Initialize server socket
@@ -13,6 +11,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._shutdown_requested = False
+        self.connections = []
         
         signal.signal(signal.SIGTERM, self.__handle_signal)
         logging.info('action: setup_signal | result: success | signal: SIGTERM')
@@ -24,6 +23,7 @@ class Server:
         if signalnum == signal.SIGTERM:
             logging.info('action: signal_received | result: success | signal: SIGTERM')
             self._shutdown_requested = True
+            self.__cleanup()
             
     def run(self):
         """
@@ -34,26 +34,23 @@ class Server:
         finishes, servers starts to accept new connections again.
         The loop will continue until a SIGTERM signal is received.
         """
-        try:
-            self._server_socket.settimeout(SOCKET_TIMEOUT)
-            while not self._shutdown_requested:
-                try:
-                    client_sock = self.__accept_new_connection()
-                    self.__handle_client_connection(client_sock)
-                except socket.timeout:
-                    continue
-                except OSError as e:
-                    if self._shutdown_requested:
-                        break
-                    logging.error(f"action: accept_connection | result: fail | error: {e}")
-        finally:
-            self.__cleanup()
+        while not self._shutdown_requested:
+            try:
+                client_sock = self.__accept_new_connection()
+                self.__handle_client_connection(client_sock)
+            except OSError as e:
+                if self._shutdown_requested:
+                    break
+                logging.error(f"action: accept_connection | result: fail | error: {e}")
             
     def __cleanup(self):
         """
         Cleanup server resources during shutdown
         """
         logging.info('action: shutting_down | result: in_progress')
+        
+        for conn in self.connections:
+            self.__close_client_connection(conn)
         
         try:
             self._server_socket.shutdown(socket.SHUT_RDWR)
@@ -64,6 +61,19 @@ class Server:
                 
         logging.info('action: shutting_down | result: success')
 
+    def __close_client_connection(self, client_sock):
+        """
+        Close a client connection
+        """
+        try:
+            client_sock.shutdown(socket.SHUT_RDWR)
+            client_sock.close()
+            if client_sock in self.connections:
+                self.connections.remove(client_sock)
+            logging.info('action: close_client_socket | result: success')
+        except OSError as e:
+            logging.error(f"action: close_client_socket | result: fail | error: {e}")
+    
     def __handle_client_connection(self, client_sock):
         """
         Read message from a specific client socket and closes the socket
@@ -76,11 +86,11 @@ class Server:
             message = protocol.deserialize_packet(packet)
         except (OSError, ConnectionError) as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
-            client_sock.close()
+            self.__close_client_connection(client_sock)
             return
         except ValueError as e:
             logging.error(f"action: deserialize_packet | result: fail | error: {e}")
-            client_sock.close()
+            self.__close_client_connection(client_sock)
             return
             
         try:
@@ -93,7 +103,7 @@ class Server:
             logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
             protocol.send_message(client_sock, protocol.BetConfirmationMessage(protocol.BetConfirmationResult.ERROR))
         finally:
-            client_sock.close()
+            self.__close_client_connection(client_sock)
 
     def __accept_new_connection(self):
         """
@@ -106,5 +116,6 @@ class Server:
         # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
+        self.connections.append(c)
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
