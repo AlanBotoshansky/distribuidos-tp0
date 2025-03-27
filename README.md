@@ -401,6 +401,14 @@ Agregado de volúmenes para montar los archivos CSV de cada agencia:
 - ./.data/agency-$i.csv:/.data/agency-$i.csv
 ```
 
+##### Modificación del valor de `batch.maxAmount`:
+Se eligió un valor de 140 para el tamaño máximo de batch, de acuerdo al siguiente cálculo:
+
+(8192 bytes - 2 bytes de len_message - 1 byte de message_type - 4 bytes de id_agencia) / (1 byte de len_nombre + 23 bytes de nombre + 1 byte de len_apellido + 10 bytes de apellido + 8 bytes de dni + 10 bytes de nacimiento + 4 bytes de numero) = 143.6
+
+Los 23 bytes de nombre y los 10 de apellido corresponden al nombre y al apellido más largos encontrados en los archivos de apuestas. Además, notar que el id de la agencia se incluye una única vez en el paquete ya que todas las apuestas corresponden a la misma agencia.
+De esta forma se asegura que ningún paquete exceda los 8kB.
+
 #### Cómo ejecutar
 
 1. Asegurarse de tener los archivos CSV de apuestas en el directorio `.data/`:
